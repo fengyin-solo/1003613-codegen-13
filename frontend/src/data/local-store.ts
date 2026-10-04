@@ -40,12 +40,40 @@ export function listRows(key: string): EntryRow[] {
   return allRows()[key] ?? []
 }
 
+// 跨站交接相关的派生台账，沿用同一份本地库、同一个取数路径，只多占几个键。
+export const HANDOVER_REMINDER_KEY = 'handover-reminder'
+export const HANDOVER_CHECKLIST_KEY = 'handover-checklist'
+
+export type StoreChange = { key: string; rows: EntryRow[] }
+
 export function saveRows(key: string, rows: EntryRow[]): void {
-  const next = { ...allRows(), [key]: rows }
-  cache = next
-  if (typeof window !== 'undefined' && window.localStorage) {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  commitAll([{ key, rows }])
+}
+
+// 多键一次落库：先在内存里拼出整库并整体序列化校验，
+// 再写 localStorage，最后才切换内存缓存——
+// 任一侧序列化或配额写入失败，缓存与已存数据都保持原样，即整体回退。
+export function commitAll(changes: StoreChange[]): void {
+  const next: Record<string, EntryRow[]> = { ...allRows() }
+  for (const change of changes) {
+    next[change.key] = change.rows
   }
+  const encoded = JSON.stringify(next)
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, encoded)
+    } catch (error) {
+      // 落库失败：不切换 cache，调用方与后续读取看到的仍是旧数据。
+      throw new Error(
+        `交接数据落库失败，已整体回退：${error instanceof Error ? error.message : '存储不可用'}`,
+      )
+    }
+  }
+  cache = next
+}
+
+export function nextRowId(rows: EntryRow[]): number {
+  return rows.reduce((max, row) => Math.max(max, Number(row.id) || 0), 0) + 1
 }
 
 export function resetRows(key: string): EntryRow[] {
