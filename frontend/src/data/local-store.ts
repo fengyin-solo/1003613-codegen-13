@@ -48,6 +48,26 @@ export function saveRows(key: string, rows: EntryRow[]): void {
   }
 }
 
+// 多模块事务：mutate 基于存储里的最新状态（绕开缓存，别的标签页写入也看得到）
+// 计算各模块改动，返回 null 表示放弃提交。整个读-检-写在一个同步块里完成，
+// 不会被其他标签页插进来，因此并发确认只落一个结果；localStorage 写不进去
+// （如超限）时缓存不动，所有模块一起回退，不会出现只落了一半的状态。
+export function transact(
+  mutate: (base: Record<string, EntryRow[]>) => Record<string, EntryRow[]> | null,
+): boolean {
+  const base = readStorage()
+  const updates = mutate(base)
+  if (updates === null) {
+    return false
+  }
+  const next = { ...base, ...updates }
+  if (typeof window !== 'undefined' && window.localStorage) {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  }
+  cache = next
+  return true
+}
+
 export function resetRows(key: string): EntryRow[] {
   const rows = clone(SEED_ROWS[key] ?? [])
   saveRows(key, rows)

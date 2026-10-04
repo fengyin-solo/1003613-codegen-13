@@ -3,7 +3,7 @@
     <header class="page-head">
       <div>
         <h2>值勤排班管理</h2>
-        <p class="page-desc">维护值勤排班表，围绕排班编号、值勤日期、值勤时段、值勤岗位做登记、筛选与状态流转。</p>
+        <p class="page-desc">维护值勤排班表，围绕排班编号、值勤日期、值勤时段、值勤岗位做登记、筛选与状态流转；确认排班会同步生成交接台账、检查站换岗提醒与巡护任务交接清单。</p>
       </div>
       <div class="page-actions">
         <button class="btn primary" type="button" @click="openCreate">登记值勤排班表</button>
@@ -74,6 +74,7 @@
 import { computed, onMounted, ref } from 'vue'
 
 import {
+  confirmDutySchedule,
   downloadEntries,
   listEntries,
   moduleMeta,
@@ -114,7 +115,11 @@ function openCreate() {
 
 function runAction(action: string, row: EntryRow) {
   errorMessage.value = ''
-  const result = applyAction(meta.key, Number(row.id), action)
+  // 确认排班走组合事务：同步生成交接台账、检查站换岗提醒与巡护任务交接清单
+  const result =
+    action === '确认排班'
+      ? confirmDutySchedule(Number(row.id))
+      : applyAction(meta.key, Number(row.id), action)
   if (!result.ok) {
     errorMessage.value = result.message
     return
